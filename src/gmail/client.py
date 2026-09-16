@@ -36,9 +36,15 @@ _REQUEST_DELAY_SECONDS = 0.1
 _PROGRESS_INTERVAL = 250
 
 
-def fetch_unread_emails(creds: Credentials) -> list[UnreadEmail]:
-    """Fetch every unread email in the inbox, paginating through the message
-    list rather than assuming it fits in one API response."""
+def fetch_unread_emails(creds: Credentials, limit: int | None = None) -> list[UnreadEmail]:
+    """Fetch unread email, paginating through the message list rather than
+    assuming it fits in one API response.
+
+    With `limit` set, stops paginating as soon as that many message IDs are
+    collected instead of walking every page — the default caller (the CLI)
+    passes a small limit so a routine run doesn't fetch an entire, possibly
+    huge, unread backlog.
+    """
     service = build("gmail", "v1", credentials=creds)
 
     message_ids: list[str] = []
@@ -51,6 +57,9 @@ def fetch_unread_emails(creds: Credentials) -> list[UnreadEmail]:
             .execute(num_retries=_API_RETRIES)
         )
         message_ids.extend(m["id"] for m in response.get("messages", []))
+        if limit is not None and len(message_ids) >= limit:
+            message_ids = message_ids[:limit]
+            break
         page_token = response.get("nextPageToken")
         if not page_token:
             break

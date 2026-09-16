@@ -19,14 +19,20 @@ app = typer.Typer()
 
 
 @app.command()
-def fetch_unread() -> None:
+def fetch_unread(
+    limit: int = typer.Option(
+        50, "--limit", help="Max unread emails to fetch. Use 0 for no limit."
+    ),
+) -> None:
     """Authenticate, fetch unread inbox emails, and print a quick summary.
 
-    Stage 1 verification only — no classification yet.
+    Stage 1 verification only — no classification yet. Defaults to a small
+    limit so a routine run stays fast regardless of inbox size; pass
+    --limit 0 to fetch the entire unread backlog.
     """
     load_dotenv()
     creds = get_credentials()
-    emails = fetch_unread_emails(creds)
+    emails = fetch_unread_emails(creds, limit=limit or None)
 
     typer.echo(f"{len(emails)} unread email(s)")
     for email in emails:
