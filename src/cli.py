@@ -1,11 +1,19 @@
 """Typer-based CLI entry point for running the agent end to end: fetch,
 classify, draft/digest (BRD section 10, MVP CLI layer)."""
 
+import sys
+
 from dotenv import load_dotenv
 import typer
 
 from gmail.auth import get_credentials
 from gmail.client import fetch_unread_emails
+
+# Windows consoles default stdout to cp1252, which can't encode most
+# Unicode (e.g. emoji in email subjects) and crashes on print. Force UTF-8
+# so arbitrary subject lines don't blow up the CLI.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 app = typer.Typer()
 
