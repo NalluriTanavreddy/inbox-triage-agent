@@ -9,6 +9,7 @@ dependencies = [
     "anthropic",
     "typer",
     "python-dotenv",
+    "pydantic>=2.13.5",
 ]
 
 [build-system]
