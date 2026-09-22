@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS drafts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email_id TEXT NOT NULL,
     draft_text TEXT NOT NULL,
+    gmail_draft_id TEXT,
     generated_at TEXT NOT NULL
 );
 """
@@ -161,8 +162,9 @@ class DigestRepository:
 
 
 class DraftRepository:
-    """Logs generated draft replies -- draft text, source email, and
-    timestamp (FR8 extension)."""
+    """Logs generated draft replies -- draft text, source email,
+    timestamp, and (once created) the Gmail draft id (FR8 extension,
+    FR7)."""
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
@@ -175,3 +177,15 @@ class DraftRepository:
                 (email_id, draft_text, now),
             )
         return cursor.lastrowid
+
+    def set_gmail_draft_id(self, draft_id: int, gmail_draft_id: str) -> None:
+        """Record the Gmail draft actually created for a logged draft
+        (FR7) -- a separate write from save() because generation and
+        Gmail creation are two steps that can each fail independently;
+        a draft can be logged with gmail_draft_id still NULL if only
+        printed, never created."""
+        with self._conn:
+            self._conn.execute(
+                "UPDATE drafts SET gmail_draft_id = ? WHERE id = ?",
+                (gmail_draft_id, draft_id),
+            )
