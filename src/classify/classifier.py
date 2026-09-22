@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import anthropic
 
 from classify.prompts import (
+    CONFIDENCE_BAND_SCORES,
     ClassificationBatch,
     EmailClassification,
     EmailType,
@@ -99,12 +100,13 @@ def classify_emails(
 
 
 def _to_classification(email: UnreadEmail, item: EmailClassification) -> Classification:
-    is_ambiguous = item.type == EmailType.AMBIGUOUS or item.confidence < CONFIDENCE_THRESHOLD
+    confidence = CONFIDENCE_BAND_SCORES[item.confidence]
+    is_ambiguous = item.type == EmailType.AMBIGUOUS or confidence < CONFIDENCE_THRESHOLD
     reason = item.reason
     if is_ambiguous and not reason:
         reason = (
             "low confidence"
-            if item.confidence < CONFIDENCE_THRESHOLD
+            if confidence < CONFIDENCE_THRESHOLD
             else "model flagged as ambiguous"
         )
     return Classification(
@@ -112,7 +114,7 @@ def _to_classification(email: UnreadEmail, item: EmailClassification) -> Classif
         subject=email.subject,
         urgency=item.urgency.value,
         type=item.type.value,
-        confidence=item.confidence,
+        confidence=confidence,
         is_ambiguous=is_ambiguous,
         reason=reason if is_ambiguous else None,
     )

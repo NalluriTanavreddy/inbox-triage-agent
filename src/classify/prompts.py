@@ -27,11 +27,17 @@ class EmailType(str, Enum):
     AMBIGUOUS = "ambiguous"
 
 
+class ConfidenceBand(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
 class EmailClassification(BaseModel):
     id: str
     urgency: Urgency
     type: EmailType
-    confidence: float
+    confidence: ConfidenceBand
     reason: str | None = None
 
 
@@ -39,13 +45,19 @@ class ClassificationBatch(BaseModel):
     classifications: list[EmailClassification]
 
 
-# Prompt-side guidance only. classifier.py enforces its own
-# CONFIDENCE_THRESHOLD in code and doesn't trust the model to have
-# followed this -- it's here so the model's own `reason` field lines up
-# with the threshold that will actually be applied.
-_PROMPT_CONFIDENCE_HINT = 0.7
+# A continuous 0.0-1.0 confidence score let the model invent an arbitrary
+# decimal each call, which showed measurable boundary flakiness on
+# identical input (see BRD Section 12) -- picking from three named bands
+# gives it a much smaller, more stable decision to make. The bands map to
+# fixed numeric values here, in code, so downstream logic (the 0.7
+# threshold, storage, CLI display) is unchanged.
+CONFIDENCE_BAND_SCORES = {
+    ConfidenceBand.HIGH: 0.9,
+    ConfidenceBand.MEDIUM: 0.6,
+    ConfidenceBand.LOW: 0.3,
+}
 
-SYSTEM_PROMPT = f"""You triage a personal email inbox. For each email in the
+SYSTEM_PROMPT = """You triage a personal email inbox. For each email in the
 batch, classify:
 
 - urgency: "today" (needs a response today), "this_week" (can wait a few
@@ -54,10 +66,22 @@ batch, classify:
   no action needed), "request" (asks the recipient to do something),
   "spam_newsletter" (bulk/promotional/automated mail), or "ambiguous" (you
   genuinely can't tell from the subject/sender/snippet alone)
-- confidence: your confidence in this classification, from 0.0 to 1.0
+- confidence: pick exactly one band, using this rubric --
+  "high": the type and urgency are unambiguous from the subject/sender/
+    snippet alone -- an obvious promotional blast, an obvious automated
+    receipt, an obvious calendar invite. No competing interpretation
+    exists.
+  "medium": a reasonable classification follows from the available
+    signals, but it took judgment -- e.g. the subject is generic or
+    templated, or urgency isn't stated and has to be inferred.
+  "low": at least two classifications are both plausible given what's
+    provided -- e.g. the snippet is too sparse to distinguish between
+    types, or the wording imitates a different category on purpose (a
+    marketing email styled as a security alert, a newsletter styled as
+    a personal note).
 - reason: a one-line explanation of why the email is hard to classify --
-  required (non-null) whenever type is "ambiguous" or confidence is below
-  {_PROMPT_CONFIDENCE_HINT}; otherwise omit it (null)
+  required (non-null) whenever type is "ambiguous" or confidence is
+  "medium" or "low"; otherwise omit it (null)
 
 Classify every email in the batch by its id and return exactly one
 classification per email, using the same id given in the input. Respond
