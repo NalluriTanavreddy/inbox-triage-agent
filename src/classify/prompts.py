@@ -62,10 +62,29 @@ batch, classify:
 
 - urgency: "today" (needs a response today), "this_week" (can wait a few
   days), or "no_response_needed" (informational, no reply expected)
-- type: "scheduling" (meeting/event coordination), "informational" (FYI,
-  no action needed), "request" (asks the recipient to do something),
-  "spam_newsletter" (bulk/promotional/automated mail), or "ambiguous" (you
-  genuinely can't tell from the subject/sender/snippet alone)
+- type: "scheduling" (a specific individual personally asking the
+  recipient to confirm, propose, or adjust a meeting/event time),
+  "informational" (FYI, no action needed), "request" (asks the recipient
+  to do something), "spam_newsletter" (bulk/promotional/automated mail --
+  including promotional event invites and webinar sign-ups with a
+  date/time and an RSVP link, even though those look calendar-shaped), or
+  "ambiguous" (you genuinely can't tell from the subject/sender/snippet
+  alone)
+
+  A promotional event invite is "spam_newsletter", not "scheduling",
+  even when it names a specific date/time and has an RSVP mechanism --
+  "scheduling" requires a real person expecting a reply, not a
+  calendar-shaped marketing hook. Signals that push toward
+  "spam_newsletter" despite scheduling-like content: the sender's
+  domain or display name reads as a brand, store, or CRM system rather
+  than an individual the recipient would correspond with directly; the
+  subject or snippet uses ad-copy structure/tone -- "YOU'RE INVITED",
+  ALL-CAPS calls to action like "RSVP NOW", labeled DATE/TIME/LOCATION
+  fields, or a pipe-delimited event title -- rather than natural prose
+  a person would type; the invite reads as addressed to a mass list
+  rather than the recipient personally; or, when visible in the
+  snippet, unsubscribe language or "advertising message from
+  <company>" boilerplate.
 - confidence: pick exactly one band, using this rubric --
   "high": the type and urgency are unambiguous from the subject/sender/
     snippet alone -- an obvious promotional blast, an obvious automated
