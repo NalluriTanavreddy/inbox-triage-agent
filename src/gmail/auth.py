@@ -8,6 +8,7 @@ creep"; FR7 is explicitly draft-only).
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -33,12 +34,21 @@ def get_credentials() -> Credentials:
     token would be returned silently, and the first API call that
     actually needs the missing scope would fail later, at call time,
     with an unhelpful 403 rather than here.
+
+    The granted-scope check reads the token file's raw JSON directly,
+    not creds.scopes -- Credentials.from_authorized_user_file(path,
+    scopes=SCOPES) unconditionally overwrites .scopes with whatever is
+    passed in (see google.oauth2.credentials.Credentials.
+    from_authorized_user_info: `if scopes is None and "scopes" in info:
+    scopes = info.get("scopes")`), so a comparison against creds.scopes
+    is always trivially true and never catches an under-scoped token.
     """
     creds: Credentials | None = None
+    has_required_scopes = False
     if TOKEN_PATH.exists():
+        granted_scopes = json.loads(TOKEN_PATH.read_text()).get("scopes", [])
+        has_required_scopes = set(SCOPES) <= set(granted_scopes)
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
-
-    has_required_scopes = bool(creds and creds.scopes and set(SCOPES) <= set(creds.scopes))
 
     if creds and creds.valid and has_required_scopes:
         return creds
