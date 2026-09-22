@@ -12,7 +12,12 @@ from digest.builder import build_digest
 from drafting.context import get_sender_context
 from drafting.generator import generate_scheduling_draft
 from gmail.auth import get_credentials
-from gmail.client import fetch_email_by_id, fetch_email_body, fetch_unread_emails
+from gmail.client import (
+    create_draft_reply,
+    fetch_email_body,
+    fetch_email_by_id,
+    fetch_unread_emails,
+)
 from storage.db import ClassificationRepository, DraftRepository, get_connection
 
 # Windows consoles default stdout to cp1252, which can't encode most
@@ -124,14 +129,21 @@ def draft(
         "--message-id",
         help="Classify and draft only this specific Gmail message id, instead of the unread batch.",
     ),
+    create_gmail_draft: bool = typer.Option(
+        False,
+        "--create-gmail-draft",
+        help="Actually create each generated draft as a real Gmail draft (never sent). "
+        "Opt-in per run -- without this flag, drafts are printed only.",
+    ),
 ) -> None:
     """Authenticate, fetch and classify unread email (or a single message
     via --message-id), and generate draft replies for scheduling-type
-    emails using sender history as context. Drafts are printed for
-    manual review only -- never sent or created as Gmail drafts (that's
-    stage 5, FR7).
+    emails using sender history as context. Printed for manual review by
+    default; pass --create-gmail-draft to also create each draft in
+    Gmail (FR7) -- draft-only, this never sends anything.
 
-    Stage 4 verification -- fetch, classify, and draft end to end.
+    Stage 4/5 verification -- fetch, classify, draft, and (opt-in)
+    create end to end.
     """
     load_dotenv()
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -170,8 +182,16 @@ def draft(
                 typer.echo("(draft generation failed -- see logs)")
                 continue
 
-            draft_repo.save(email.id, draft_result.body)
+            draft_row_id = draft_repo.save(email.id, draft_result.body)
             typer.echo(draft_result.body)
+
+            if create_gmail_draft:
+                gmail_draft_id = create_draft_reply(creds, email.id, draft_result.body)
+                if gmail_draft_id is None:
+                    typer.echo("(Gmail draft creation failed -- see logs)")
+                    continue
+                draft_repo.set_gmail_draft_id(draft_row_id, gmail_draft_id)
+                typer.echo(f"[Gmail draft created: {gmail_draft_id}]")
     finally:
         conn.close()
 
