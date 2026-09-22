@@ -77,6 +77,14 @@ def fetch_unread_emails(creds: Credentials, limit: int | None = None) -> list[Un
     return emails
 
 
+def fetch_email_by_id(creds: Credentials, message_id: str) -> UnreadEmail:
+    """Fetch a single email's summary by its Gmail message id, regardless
+    of unread/label status -- for targeting one specific message (e.g.
+    manual verification) instead of the unread batch."""
+    service = build("gmail", "v1", credentials=creds)
+    return _fetch_email_summary(service, message_id)
+
+
 def _fetch_email_summary(service, message_id: str) -> UnreadEmail:
     message = (
         service.users()
