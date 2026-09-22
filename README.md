@@ -10,10 +10,14 @@ metrics.
 
 ## Status
 
-- **FR1** Gmail OAuth2 (readonly scope) — done
+- **FR1** Gmail OAuth2 (readonly + compose scope) — done
 - **FR2** Paginated unread fetch — done
 - **FR3/FR4** Batched Claude classification with low-confidence force-flagging — done
-- Digest generation and reply drafting — not started
+- **FR6** Ambiguous-email digest — done
+- **FR5** Scheduling draft generation with sender-history tone context — done
+- **FR7** Gmail draft creation (proper reply threading, opt-in, never sends) — done
+- **FR8** Classification/digest/draft outcomes logged to SQLite — done
+- Remaining: stage 6 (dogfooding + timed measurement), stage 7 (Streamlit UI, polish)
 
 ## Setup
 
@@ -30,8 +34,15 @@ Run commands from the project root, with `src` on the Python path:
 ```
 PYTHONPATH=src uv run python -m cli fetch-unread --limit 50
 PYTHONPATH=src uv run python -m cli classify --limit 50
+PYTHONPATH=src uv run python -m cli digest --limit 50
+PYTHONPATH=src uv run python -m cli draft --limit 50
+PYTHONPATH=src uv run python -m cli draft --message-id <id> --create-gmail-draft
 ```
 
 Pass `--limit 0` to fetch/classify the entire unread backlog instead of a
-capped sample. The first run opens a browser window for Gmail OAuth consent;
-after that, credentials are cached in `token.json`.
+capped sample. `draft --message-id` targets one specific email instead of
+the unread batch; add `--create-gmail-draft` to actually create the
+generated reply as a real Gmail draft (opt-in, never sends — default is
+print-only). The first run opens a browser window for Gmail OAuth consent;
+after that, credentials are cached in `token.json`. Adding a new scope
+(as stage 5 did) triggers one re-consent automatically.
