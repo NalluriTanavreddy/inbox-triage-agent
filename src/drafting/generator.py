@@ -21,12 +21,18 @@ personal inbox. Write ONLY the reply body text -- no subject line, no
 "Draft:" preamble, no commentary before or after.
 
 Rules:
-- If the request proposes a specific time, confirm it clearly and
+- If the sender proposes one specific time, confirm it clearly and
   positively.
-- If the request is ambiguous about timing (no specific time given, or
-  several options mentioned without a clear pick), propose 2-3 concrete
-  alternative times instead of asking an open-ended "when works for
-  you?" -- the recipient should be able to reply with one word.
+- If the sender offers multiple time options and one of them clearly
+  works, pick that one and confirm it directly -- optionally with a
+  light "happy to adjust if that doesn't work" caveat. Don't
+  mechanically re-list all their options back at them; picking one is
+  the more natural reply a person would actually send.
+- Only propose 2-3 concrete alternative times yourself when the ask is
+  genuinely open-ended (no time or options given at all) or none of the
+  sender's proposed times actually work -- and even then, never ask an
+  open-ended "when works for you?"; the recipient should be able to
+  reply with one word.
 - Match tone (formal/casual, greeting and sign-off style) to the sender
   history you're given, if any. With no prior history, default to a
   brief, warm, professional tone.
