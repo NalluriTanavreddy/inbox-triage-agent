@@ -1,10 +1,13 @@
 """SQLite storage layer, using a repository pattern to avoid duplicated
 query logic across modules (NFR: Maintainability). Logs classification
-outcomes (FR8) and digest generations (FR6).
+outcomes (FR8), digest generations (FR6), and generated drafts (FR8
+extension).
 
-Kept minimal on purpose — schema covers what classification and digest
-need today; drafting (Stage 4) extends this once it knows what it needs,
-rather than guessing ahead of time.
+The classifications table doubles as the sender-history source for
+drafting (FR5) -- every classify run already logs one row per email
+(sender, subject, snippet), which is exactly the raw material tone
+inference needs. A separate sender-history table would duplicate that
+same one-row-per-email log for no benefit at MVP scope.
 """
 
 from __future__ import annotations
@@ -21,7 +24,9 @@ DB_PATH = Path("inbox_triage.db")
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS classifications (
     email_id TEXT PRIMARY KEY,
+    sender TEXT NOT NULL,
     subject TEXT NOT NULL,
+    snippet TEXT NOT NULL,
     urgency TEXT NOT NULL,
     type TEXT NOT NULL,
     confidence REAL NOT NULL,
@@ -30,12 +35,40 @@ CREATE TABLE IF NOT EXISTS classifications (
     classified_at TEXT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_classifications_sender ON classifications(sender);
+
 CREATE TABLE IF NOT EXISTS digests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     generated_at TEXT NOT NULL,
     email_ids TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_id TEXT NOT NULL,
+    draft_text TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
 """
+
+
+_CLASSIFICATION_COLUMNS = (
+    "email_id, sender, subject, snippet, urgency, type, confidence, is_ambiguous, reason"
+)
+
+
+def _row_to_classification(row: tuple) -> Classification:
+    return Classification(
+        email_id=row[0],
+        sender=row[1],
+        subject=row[2],
+        snippet=row[3],
+        urgency=row[4],
+        type=row[5],
+        confidence=row[6],
+        is_ambiguous=bool(row[7]),
+        reason=row[8],
+    )
 
 
 def get_connection(db_path: Path | str = DB_PATH) -> sqlite3.Connection:
@@ -58,10 +91,12 @@ class ClassificationRepository:
             self._conn.executemany(
                 """
                 INSERT INTO classifications
-                    (email_id, subject, urgency, type, confidence, is_ambiguous, reason, classified_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (email_id, sender, subject, snippet, urgency, type, confidence, is_ambiguous, reason, classified_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(email_id) DO UPDATE SET
+                    sender=excluded.sender,
                     subject=excluded.subject,
+                    snippet=excluded.snippet,
                     urgency=excluded.urgency,
                     type=excluded.type,
                     confidence=excluded.confidence,
@@ -72,7 +107,9 @@ class ClassificationRepository:
                 [
                     (
                         c.email_id,
+                        c.sender,
                         c.subject,
+                        c.snippet,
                         c.urgency,
                         c.type,
                         c.confidence,
@@ -86,21 +123,25 @@ class ClassificationRepository:
 
     def get_ambiguous(self) -> list[Classification]:
         rows = self._conn.execute(
-            "SELECT email_id, subject, urgency, type, confidence, is_ambiguous, reason "
-            "FROM classifications WHERE is_ambiguous = 1 ORDER BY classified_at"
+            f"SELECT {_CLASSIFICATION_COLUMNS} FROM classifications "
+            "WHERE is_ambiguous = 1 ORDER BY classified_at"
         ).fetchall()
-        return [
-            Classification(
-                email_id=row[0],
-                subject=row[1],
-                urgency=row[2],
-                type=row[3],
-                confidence=row[4],
-                is_ambiguous=bool(row[5]),
-                reason=row[6],
-            )
-            for row in rows
-        ]
+        return [_row_to_classification(row) for row in rows]
+
+    def get_by_sender(
+        self, sender: str, exclude_email_id: str | None = None, limit: int = 5
+    ) -> list[Classification]:
+        """Prior logged emails from this sender, most recent first --
+        the raw material drafting.context uses for tone (FR5)."""
+        query = f"SELECT {_CLASSIFICATION_COLUMNS} FROM classifications WHERE sender = ?"
+        params: list = [sender]
+        if exclude_email_id:
+            query += " AND email_id != ?"
+            params.append(exclude_email_id)
+        query += " ORDER BY classified_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(query, params).fetchall()
+        return [_row_to_classification(row) for row in rows]
 
 
 class DigestRepository:
@@ -115,5 +156,22 @@ class DigestRepository:
             cursor = self._conn.execute(
                 "INSERT INTO digests (generated_at, email_ids) VALUES (?, ?)",
                 (now, json.dumps(email_ids)),
+            )
+        return cursor.lastrowid
+
+
+class DraftRepository:
+    """Logs generated draft replies -- draft text, source email, and
+    timestamp (FR8 extension)."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def save(self, email_id: str, draft_text: str) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn:
+            cursor = self._conn.execute(
+                "INSERT INTO drafts (email_id, draft_text, generated_at) VALUES (?, ?, ?)",
+                (email_id, draft_text, now),
             )
         return cursor.lastrowid

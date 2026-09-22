@@ -3,6 +3,8 @@ inboxes with more than 50 unread messages (FR2)."""
 
 from __future__ import annotations
 
+import base64
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -102,3 +104,60 @@ def _internal_date_to_iso(internal_date: str) -> str:
     """Gmail's internalDate (epoch ms) is a more reliable timestamp source
     than the From/Date header, which senders format inconsistently."""
     return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc).isoformat()
+
+
+_EMAIL_ADDRESS_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def normalize_sender_email(raw_sender: str) -> str:
+    """Extract and lowercase just the email address from a raw "From"
+    header (e.g. "Jane Doe <jane@example.com>" -> "jane@example.com"), so
+    sender-history lookups (FR5) key on the address rather than on
+    display-name formatting, which can vary per message."""
+    match = _EMAIL_ADDRESS_RE.search(raw_sender)
+    return (match.group(0) if match else raw_sender.strip()).lower()
+
+
+def fetch_email_body(creds: Credentials, message_id: str) -> str:
+    """Fetch one email's plain-text body.
+
+    Stage 1's bulk fetch only pulls headers and Gmail's short snippet
+    (~100 chars) -- enough for classification, not enough to draft a
+    genuinely useful reply (FR5). Fetched lazily, one message at a time,
+    only for emails actually being drafted, so the cheap bulk path stays
+    cheap.
+    """
+    service = build("gmail", "v1", credentials=creds)
+    message = (
+        service.users()
+        .messages()
+        .get(userId="me", id=message_id, format="full")
+        .execute(num_retries=_API_RETRIES)
+    )
+    return _extract_plain_text(message["payload"])
+
+
+def _extract_plain_text(payload: dict) -> str:
+    plain = _find_body_by_mime_type(payload, "text/plain")
+    if plain:
+        return plain
+    # No text/plain part anywhere in the tree -- fall back to text/html,
+    # stripped of markup, rather than returning nothing.
+    html = _find_body_by_mime_type(payload, "text/html")
+    return re.sub(r"<[^>]+>", " ", html) if html else ""
+
+
+def _find_body_by_mime_type(payload: dict, mime_type: str) -> str:
+    if payload.get("mimeType") == mime_type and payload.get("body", {}).get("data"):
+        return _decode_body(payload["body"]["data"])
+    for part in payload.get("parts") or []:
+        found = _find_body_by_mime_type(part, mime_type)
+        if found:
+            return found
+    return ""
+
+
+def _decode_body(data: str) -> str:
+    # Gmail encodes body data as URL-safe base64 without padding.
+    padded = data + "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")

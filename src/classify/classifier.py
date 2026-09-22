@@ -17,7 +17,7 @@ from classify.prompts import (
     SYSTEM_PROMPT,
     build_batch_prompt,
 )
-from gmail.client import UnreadEmail
+from gmail.client import UnreadEmail, normalize_sender_email
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,8 @@ _MAX_OUTPUT_TOKENS = 8192
 class Classification:
     email_id: str
     subject: str
+    sender: str
+    snippet: str
     urgency: str
     type: str
     confidence: float
@@ -112,6 +114,8 @@ def _to_classification(email: UnreadEmail, item: EmailClassification) -> Classif
     return Classification(
         email_id=email.id,
         subject=email.subject,
+        sender=normalize_sender_email(email.sender),
+        snippet=email.snippet,
         urgency=item.urgency.value,
         type=item.type.value,
         confidence=confidence,
@@ -124,6 +128,8 @@ def _failed_classification(email: UnreadEmail) -> Classification:
     return Classification(
         email_id=email.id,
         subject=email.subject,
+        sender=normalize_sender_email(email.sender),
+        snippet=email.snippet,
         urgency="unknown",
         type="ambiguous",
         confidence=0.0,
