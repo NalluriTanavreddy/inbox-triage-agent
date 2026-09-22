@@ -8,8 +8,10 @@ from dotenv import load_dotenv
 import typer
 
 from classify.classifier import classify_emails
+from digest.builder import build_digest
 from gmail.auth import get_credentials
 from gmail.client import fetch_unread_emails
+from storage.db import ClassificationRepository, get_connection
 
 # Windows consoles default stdout to cp1252, which can't encode most
 # Unicode (e.g. emoji in email subjects) and crashes on print. Force UTF-8
@@ -75,6 +77,39 @@ def classify(
     ambiguous_count = sum(1 for r in results if r.is_ambiguous)
     typer.echo("")
     typer.echo(f"{ambiguous_count}/{len(results)} flagged ambiguous")
+
+
+@app.command()
+def digest(
+    limit: int = typer.Option(
+        50, "--limit", help="Max unread emails to fetch and classify. Use 0 for no limit."
+    ),
+) -> None:
+    """Authenticate, fetch and classify unread email, persist the outcomes,
+    and print a digest of only the ambiguous ones with their reasons.
+
+    Stage 3 verification — fetch, classify, and digest end to end.
+    """
+    load_dotenv()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        typer.echo("ANTHROPIC_API_KEY is not set — add it to .env", err=True)
+        raise typer.Exit(1)
+
+    creds = get_credentials()
+    emails = fetch_unread_emails(creds, limit=limit or None)
+    typer.echo(f"{len(emails)} unread email(s) fetched; classifying...")
+
+    results = classify_emails(emails)
+
+    conn = get_connection()
+    try:
+        ClassificationRepository(conn).save_all(results)
+        digest_text = build_digest(conn)
+    finally:
+        conn.close()
+
+    typer.echo("")
+    typer.echo(digest_text)
 
 
 if __name__ == "__main__":
