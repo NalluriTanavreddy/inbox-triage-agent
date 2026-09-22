@@ -28,7 +28,15 @@ MODEL = "claude-sonnet-5"
 # trusted as the sole gate (FR4).
 CONFIDENCE_THRESHOLD = 0.7
 
-_MAX_OUTPUT_TOKENS = 8192
+# 8192 silently truncated the JSON response (and dropped the whole
+# batch to all-ambiguous, since a cut-off response fails schema
+# validation) at roughly 200 emails per batch -- found while sampling
+# a larger batch for stage 4 verification. Raised with headroom for a
+# few hundred emails. Anthropic's non-streaming client refuses a
+# max_tokens high enough to risk a >10-minute generation (hit at
+# 32000), so batches too large for this should switch to streaming
+# rather than raising this further.
+_MAX_OUTPUT_TOKENS = 20000
 
 
 @dataclass

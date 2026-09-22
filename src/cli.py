@@ -9,9 +9,11 @@ import typer
 
 from classify.classifier import classify_emails
 from digest.builder import build_digest
+from drafting.context import get_sender_context
+from drafting.generator import generate_scheduling_draft
 from gmail.auth import get_credentials
-from gmail.client import fetch_unread_emails
-from storage.db import ClassificationRepository, get_connection
+from gmail.client import fetch_email_body, fetch_unread_emails
+from storage.db import ClassificationRepository, DraftRepository, get_connection
 
 # Windows consoles default stdout to cp1252, which can't encode most
 # Unicode (e.g. emoji in email subjects) and crashes on print. Force UTF-8
@@ -110,6 +112,59 @@ def digest(
 
     typer.echo("")
     typer.echo(digest_text)
+
+
+@app.command()
+def draft(
+    limit: int = typer.Option(
+        50, "--limit", help="Max unread emails to fetch and classify. Use 0 for no limit."
+    ),
+) -> None:
+    """Authenticate, fetch and classify unread email, and generate draft
+    replies for scheduling-type emails using sender history as context.
+    Drafts are printed for manual review only -- never sent or created
+    as Gmail drafts (that's stage 5, FR7).
+
+    Stage 4 verification -- fetch, classify, and draft end to end.
+    """
+    load_dotenv()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        typer.echo("ANTHROPIC_API_KEY is not set — add it to .env", err=True)
+        raise typer.Exit(1)
+
+    creds = get_credentials()
+    emails = fetch_unread_emails(creds, limit=limit or None)
+    typer.echo(f"{len(emails)} unread email(s) fetched; classifying...")
+
+    results = classify_emails(emails)
+    emails_by_id = {email.id: email for email in emails}
+
+    conn = get_connection()
+    try:
+        ClassificationRepository(conn).save_all(results)
+
+        scheduling = [r for r in results if r.type == "scheduling"]
+        typer.echo("")
+        typer.echo(f"{len(scheduling)} scheduling email(s) found")
+
+        draft_repo = DraftRepository(conn)
+        for r in scheduling:
+            email = emails_by_id[r.email_id]
+            context = get_sender_context(conn, r.sender, exclude_email_id=email.id)
+            body_text = fetch_email_body(creds, email.id) or email.snippet
+
+            draft_result = generate_scheduling_draft(email, body_text, context)
+
+            typer.echo("")
+            typer.echo(f"--- {email.subject}  (from {email.sender}) ---")
+            if draft_result is None:
+                typer.echo("(draft generation failed -- see logs)")
+                continue
+
+            draft_repo.save(email.id, draft_result.body)
+            typer.echo(draft_result.body)
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
