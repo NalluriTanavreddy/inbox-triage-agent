@@ -17,7 +17,8 @@ metrics.
 - **FR5** Scheduling draft generation with sender-history tone context — done
 - **FR7** Gmail draft creation (proper reply threading, opt-in, never sends) — done
 - **FR8** Classification/digest/draft outcomes logged to SQLite — done
-- Remaining: stage 6 (dogfooding + timed measurement), stage 7 (Streamlit UI, polish)
+- Stage 7 UI: FastAPI backend + custom HTML/CSS/JS frontend — done
+- Remaining: stage 6 (dogfooding + timed measurement)
 
 ## Setup
 
@@ -46,3 +47,20 @@ generated reply as a real Gmail draft (opt-in, never sends — default is
 print-only). The first run opens a browser window for Gmail OAuth consent;
 after that, credentials are cached in `token.json`. Adding a new scope
 (as stage 5 did) triggers one re-consent automatically.
+
+### Web UI (stage 7)
+
+Run the FastAPI backend from the project root, not from `src/` --
+`token.json`, `.env`'s secrets path, the SQLite db, and `settings.json`
+are all resolved relative to the current working directory, same as the
+CLI. `--app-dir src` makes `api.main:app` importable without changing
+that directory:
+
+```
+uv run uvicorn api.main:app --app-dir src --reload
+```
+
+Then open http://127.0.0.1:8000/ — the backend serves the frontend
+directly, so there's no separate server or build step. Settings (fetch
+limit, confidence threshold, dry-run toggle) are edited from the gear
+icon and persisted to `settings.json`.
