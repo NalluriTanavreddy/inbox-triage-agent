@@ -98,6 +98,13 @@
   .card-reason { font-size: 13.5px; color: var(--text-muted); margin-top: 4px; }
   .card.attention .card-reason { color: var(--accent-text); }
 
+  .gmail-link {
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 8px;
+    font-size: 12.5px; font-weight: 600; color: var(--text-muted); text-decoration: none;
+  }
+  .gmail-link:hover { color: var(--text); text-decoration: underline; }
+  .card.attention .gmail-link { color: var(--accent-text); }
+
   textarea.draft-body {
     width: 100%; margin-top: 10px; border: 1px solid var(--border); border-radius: 12px;
     padding: 10px 12px; font-family: inherit; font-size: 13.5px; line-height: 1.5;
@@ -273,7 +280,16 @@
     info: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="8" r="0.4" fill="currentColor" stroke="none"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
     x: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    external: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4L10 14"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg>',
   };
+
+  // Verified against a real Gmail thread id (Stage 7 UX review): the
+  // "Needs your attention"/draft cards only ever come from the unread
+  // INBOX fetch, so #inbox/<thread_id> is safe here -- thread_id, not
+  // the message id, since a reply's message id and thread id differ.
+  function gmailThreadUrl(threadId) {
+    return `https://mail.google.com/mail/u/0/#inbox/${encodeURIComponent(threadId)}`;
+  }
 
   const ROUTINE_LABELS = {
     spam_newsletter: 'Newsletters & promos',
@@ -347,6 +363,7 @@
         <div class="card-body">
           <div class="card-subject">${escapeHtml(item.subject)}</div>
           <div class="card-reason">${escapeHtml(item.reason || 'Flagged for review')}</div>
+          <a class="gmail-link" href="${gmailThreadUrl(item.thread_id)}" target="_blank" rel="noopener noreferrer">${ICONS.external}<span>Open in Gmail</span></a>
         </div>
       `;
       container.appendChild(card);
