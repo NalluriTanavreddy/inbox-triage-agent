@@ -53,11 +53,18 @@ class Classification:
 
 
 def classify_emails(
-    emails: list[UnreadEmail], client: anthropic.Anthropic | None = None
+    emails: list[UnreadEmail],
+    client: anthropic.Anthropic | None = None,
+    confidence_threshold: float = CONFIDENCE_THRESHOLD,
 ) -> list[Classification]:
     """Classify a batch of emails in a single Claude API call -- never one
     call per email, which would hit the same kind of quota wall the Gmail
-    per-message fetch did in stage 1, just against the Anthropic API."""
+    per-message fetch did in stage 1, just against the Anthropic API.
+
+    confidence_threshold defaults to the module constant but is
+    overridable -- the stage 7 settings panel exposes it as a user-
+    facing knob rather than requiring a code change to adjust it.
+    """
     if not emails:
         return []
 
@@ -93,7 +100,7 @@ def classify_emails(
         if email is None:
             logger.warning("Classification returned unknown email id %r; ignoring", item.id)
             continue
-        by_result_id[item.id] = _to_classification(email, item)
+        by_result_id[item.id] = _to_classification(email, item, confidence_threshold)
 
     results = []
     for email in emails:
@@ -109,14 +116,16 @@ def classify_emails(
     return results
 
 
-def _to_classification(email: UnreadEmail, item: EmailClassification) -> Classification:
+def _to_classification(
+    email: UnreadEmail, item: EmailClassification, confidence_threshold: float
+) -> Classification:
     confidence = CONFIDENCE_BAND_SCORES[item.confidence]
-    is_ambiguous = item.type == EmailType.AMBIGUOUS or confidence < CONFIDENCE_THRESHOLD
+    is_ambiguous = item.type == EmailType.AMBIGUOUS or confidence < confidence_threshold
     reason = item.reason
     if is_ambiguous and not reason:
         reason = (
             "low confidence"
-            if confidence < CONFIDENCE_THRESHOLD
+            if confidence < confidence_threshold
             else "model flagged as ambiguous"
         )
     return Classification(

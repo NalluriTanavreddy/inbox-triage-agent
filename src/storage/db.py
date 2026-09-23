@@ -178,6 +178,16 @@ class DraftRepository:
             )
         return cursor.lastrowid
 
+    def get_email_id(self, draft_id: int) -> str | None:
+        """Look up the source email id for a logged draft row -- the
+        stage 7 API takes the (possibly user-edited) draft body straight
+        from the request, but still needs the original email id to
+        thread the Gmail draft as a reply (FR7)."""
+        row = self._conn.execute(
+            "SELECT email_id FROM drafts WHERE id = ?", (draft_id,)
+        ).fetchone()
+        return row[0] if row else None
+
     def set_gmail_draft_id(self, draft_id: int, gmail_draft_id: str) -> None:
         """Record the Gmail draft actually created for a logged draft
         (FR7) -- a separate write from save() because generation and
