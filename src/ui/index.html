@@ -123,16 +123,30 @@
   .draft-status.ok { color: #2f7a4d; }
   .draft-status.err { color: #9c3428; }
 
-  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .routine-groups { display: flex; flex-direction: column; gap: 8px; }
   .chip {
     display: inline-flex; align-items: center; gap: 7px; background: var(--pill-bg); color: var(--pill-text);
     border-radius: var(--radius-pill); padding: 9px 16px 9px 10px; font-size: 13px; font-weight: 600;
+    border: none; font-family: inherit; cursor: pointer;
   }
+  .chip:hover { background: #e4e4e7; }
   .chip .chip-icon-badge {
     width: 22px; height: 22px; border-radius: 50%; background: #e3e3e6;
     display: flex; align-items: center; justify-content: center; color: #57575b;
   }
   .chip .chip-count { color: var(--text-muted); font-weight: 500; }
+  .chip .chip-caret { display: flex; margin-left: 2px; color: var(--text-muted); transition: transform 0.15s ease; }
+  .chip.expanded .chip-caret { transform: rotate(180deg); }
+
+  .routine-subjects {
+    display: none; list-style: none; margin: 6px 0 0 4px; padding: 6px 14px;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px;
+  }
+  .routine-subjects.open { display: block; }
+  .routine-subjects li {
+    font-size: 13px; color: var(--text); padding: 7px 0; border-bottom: 1px solid var(--bg);
+  }
+  .routine-subjects li:last-child { border-bottom: none; }
 
   .empty-state { color: var(--text-muted); font-size: 13.5px; padding: 6px 2px 14px; }
 
@@ -228,7 +242,7 @@
 
     <section class="group">
       <h2>Routine</h2>
-      <div class="chip-row" id="routine-chips">
+      <div class="routine-groups" id="routine-chips">
         <div class="empty-state">Run triage to see a breakdown.</div>
       </div>
     </section>
@@ -281,6 +295,7 @@
     check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
     x: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     external: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4L10 14"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
   };
 
   // Verified against a real Gmail thread id (Stage 7 UX review): the
@@ -344,7 +359,7 @@
   function renderStats(data) {
     document.getElementById('stat-fetched').textContent = data.fetched;
     document.getElementById('stat-attention').textContent = data.ambiguous.length;
-    const routineTotal = Object.values(data.routine_counts).reduce((a, b) => a + b, 0);
+    const routineTotal = Object.values(data.routine).reduce((a, subjects) => a + subjects.length, 0);
     document.getElementById('stat-routine').textContent = routineTotal + data.drafts.length;
   }
 
@@ -401,23 +416,35 @@
     container.querySelectorAll('.skip-btn').forEach(btn => btn.addEventListener('click', onSkipDraft));
   }
 
-  function renderRoutine(counts) {
+  function renderRoutine(routine) {
     const container = document.getElementById('routine-chips');
     container.innerHTML = '';
-    const entries = Object.entries(counts);
+    const entries = Object.entries(routine);
     if (entries.length === 0) {
       container.innerHTML = '<div class="empty-state">Nothing routine this run.</div>';
       return;
     }
-    for (const [type, count] of entries) {
-      const chip = document.createElement('span');
-      chip.className = 'chip';
-      chip.innerHTML = `
-        <span class="chip-icon-badge">${ICONS[typeIcon(type)]}</span>
-        <span>${escapeHtml(ROUTINE_LABELS[type] || type)}</span>
-        <span class="chip-count">${count}</span>
+    for (const [type, subjects] of entries) {
+      const group = document.createElement('div');
+      group.className = 'routine-group';
+      group.innerHTML = `
+        <button type="button" class="chip routine-chip">
+          <span class="chip-icon-badge">${ICONS[typeIcon(type)]}</span>
+          <span>${escapeHtml(ROUTINE_LABELS[type] || type)}</span>
+          <span class="chip-count">${subjects.length}</span>
+          <span class="chip-caret">${ICONS.chevron}</span>
+        </button>
+        <ul class="routine-subjects">
+          ${subjects.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+        </ul>
       `;
-      container.appendChild(chip);
+      const chipBtn = group.querySelector('.routine-chip');
+      const list = group.querySelector('.routine-subjects');
+      chipBtn.addEventListener('click', () => {
+        const isOpen = list.classList.toggle('open');
+        chipBtn.classList.toggle('expanded', isOpen);
+      });
+      container.appendChild(group);
     }
   }
 
@@ -434,7 +461,7 @@
       renderStats(data);
       renderAmbiguous(data.ambiguous);
       renderDrafts(data.drafts);
-      renderRoutine(data.routine_counts);
+      renderRoutine(data.routine);
     } catch (err) {
       showError(err.message);
     } finally {
