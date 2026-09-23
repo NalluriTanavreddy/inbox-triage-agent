@@ -17,7 +17,6 @@ PYTHONPATH -- see README).
 from __future__ import annotations
 
 import os
-from collections import Counter
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -51,6 +50,7 @@ def index() -> FileResponse:
 
 class AmbiguousItem(BaseModel):
     email_id: str
+    thread_id: str
     subject: str
     sender: str
     urgency: str
@@ -61,6 +61,7 @@ class AmbiguousItem(BaseModel):
 class DraftItem(BaseModel):
     draft_id: int
     email_id: str
+    thread_id: str
     subject: str
     sender: str
     body: str
@@ -70,7 +71,10 @@ class RunTriageResponse(BaseModel):
     fetched: int
     ambiguous: list[AmbiguousItem]
     drafts: list[DraftItem]
-    routine_counts: dict[str, int]
+    # type -> subjects, not just a count -- the UI expands a routine
+    # chip to show the real emails behind it, so the subjects have to
+    # survive past the Counter instead of being discarded after tallying.
+    routine: dict[str, list[str]]
 
 
 @app.post("/run-triage", response_model=RunTriageResponse)
@@ -120,17 +124,23 @@ def run_triage() -> RunTriageResponse:
                 DraftItem(
                     draft_id=draft_row_id,
                     email_id=email.id,
+                    thread_id=email.thread_id,
                     subject=email.subject,
                     sender=email.sender,
                     body=draft_result.body,
                 )
             )
 
+        routine_subjects: dict[str, list[str]] = {}
+        for r in routine:
+            routine_subjects.setdefault(r.type, []).append(r.subject)
+
         return RunTriageResponse(
             fetched=len(emails),
             ambiguous=[
                 AmbiguousItem(
                     email_id=r.email_id,
+                    thread_id=emails_by_id[r.email_id].thread_id,
                     subject=r.subject,
                     sender=r.sender,
                     urgency=r.urgency,
@@ -140,7 +150,7 @@ def run_triage() -> RunTriageResponse:
                 for r in ambiguous
             ],
             drafts=draft_items,
-            routine_counts=dict(Counter(r.type for r in routine)),
+            routine=routine_subjects,
         )
     finally:
         conn.close()

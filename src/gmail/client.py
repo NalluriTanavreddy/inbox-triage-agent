@@ -25,6 +25,7 @@ class UnreadEmail:
     consume; nothing more yet."""
 
     id: str
+    thread_id: str
     subject: str
     sender: str
     snippet: str
@@ -106,6 +107,7 @@ def _fetch_email_summary(service, message_id: str) -> UnreadEmail:
 
     return UnreadEmail(
         id=message["id"],
+        thread_id=message["threadId"],
         subject=headers.get("Subject", "(no subject)"),
         sender=headers.get("From", "(unknown sender)"),
         snippet=message.get("snippet", ""),
